@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -10,4 +8,221 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum RolUsuario {
+  ADMINISTRADOR
+  ORGANIZADOR
+  ESTUDIANTE
+}
+
+enum EstadoEvento {
+  BORRADOR
+  PUBLICADO
+  EN_CURSO
+  FINALIZADO
+  CANCELADO
+}
+
+enum EstadoRegistro {
+  REGISTRADO
+  ASISTIO
+  NO_ASISTIO
+  CANCELADO
+}
+
+model Usuario {
+  id        String   @id @default(cuid())
+  nombre    String
+  apellido  String
+  email     String   @unique
+  password  String
+  rol       RolUsuario @default(ESTUDIANTE)
+  fotoPerfil String?
+  carrera   String?
+  matricula String?   @unique
+  telefono  String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  eventosOrganizados Evento[]
+  registros          Registro[]
+  notificaciones     Notificacion[]
+  comentarios        Comentario[]
+  calificaciones     Calificacion[]
+
+  @@map("usuarios")
+}
+
+model Evento {
+  id              String        @id @default(cuid())
+  titulo          String
+  descripcion     String        @db.Text
+  slug            String        @unique
+  imagen          String?
+  fecha           DateTime
+  fechaFin        DateTime?
+  ubicacion       String
+  capacidad       Int
+  asistentes      Int           @default(0)
+  categoria       String
+  subcategoria    String?
+  tags            String[]
+  organizadorId   String
+  organizador     Usuario       @relation(fields: [organizadorId], references: [id], onDelete: Cascade)
+  estado          EstadoEvento  @default(BORRADOR)
+  responsableId   String?
+  requiereAprobacion Boolean     @default(false)
+  requiereDocumento Boolean     @default(false)
+  requiereEncuesta Boolean      @default(false)
+  mostrarRegistrados Boolean    @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relaciones
+  registros       Registro[]
+  comentarios     Comentario[]
+  calificaciones  Calificacion[]
+  encuestas       Encuesta[]
+  documentos      Documento[]
+  timeline        Timeline[]
+
+  @@index([organizadorId])
+  @@index([estado])
+  @@index([fecha])
+  @@map("eventos")
+}
+
+model Registro {
+  id              String           @id @default(cuid())
+  usuarioId       String
+  usuario         Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  eventoId        String
+  evento          Evento           @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  estado          EstadoRegistro   @default(REGISTRADO)
+  fechaRegistro   DateTime         @default(now())
+  fechaConfirmacion DateTime?
+  documento       String?
+  aceptoTerminos  Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([usuarioId, eventoId])
+  @@index([eventoId])
+  @@index([usuarioId])
+  @@map("registros")
+}
+
+model Comentario {
+  id        String   @id @default(cuid())
+  contenido String   @db.Text
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  eventoId  String
+  evento    Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([eventoId])
+  @@index([usuarioId])
+  @@map("comentarios")
+}
+
+model Calificacion {
+  id        String   @id @default(cuid())
+  puntuacion Int      // 1-5 estrellas
+  comentario String?  @db.Text
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  eventoId  String
+  evento    Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([usuarioId, eventoId])
+  @@index([eventoId])
+  @@map("calificaciones")
+}
+
+model Encuesta {
+  id        String   @id @default(cuid())
+  titulo    String
+  eventoId  String
+  evento    Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  preguntas Pregunta[]
+
+  @@index([eventoId])
+  @@map("encuestas")
+}
+
+model Pregunta {
+  id        String   @id @default(cuid())
+  texto     String
+  tipo      String   // "opcion_multiple", "abierta", "escala"
+  opciones  String[]
+  encuestaId String
+  encuesta  Encuesta @relation(fields: [encuestaId], references: [id], onDelete: Cascade)
+
+  respuestas Respuesta[]
+
+  @@index([encuestaId])
+  @@map("preguntas")
+}
+
+model Respuesta {
+  id        String   @id @default(cuid())
+  texto     String   @db.Text
+  preguntaId String
+  pregunta  Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([preguntaId])
+  @@map("respuestas")
+}
+
+model Documento {
+  id        String   @id @default(cuid())
+  nombre    String
+  url       String
+  tipo      String
+  eventoId  String
+  evento    Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([eventoId])
+  @@map("documentos")
+}
+
+model Notificacion {
+  id        String   @id @default(cuid())
+  titulo    String
+  mensaje   String   @db.Text
+  tipo      String   // "evento", "registro", "recordatorio"
+  leida     Boolean  @default(false)
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([leida])
+  @@map("notificaciones")
+}
+
+model Timeline {
+  id        String   @id @default(cuid())
+  titulo    String
+  descripcion String
+  fecha      DateTime
+  tipo       String
+  eventoId   String
+  evento     Evento   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([eventoId])
+  @@map("timeline")
 }
